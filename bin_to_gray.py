@@ -18,10 +18,12 @@ def bin_to_png(bin_file, width, height, output_png):
     
     #Isolate a specific channel
     image_start = 0
+    #image_end = width * height * 1
     #image_end = width * height * 2
     image_end = width * height * 3 + image_start
-    image_data = image_data[image_start:image_end:3]
-
+    image_step = 1
+    image_data = image_data[image_start:image_end:image_step]
+    #image_data = image_data[image_start:image_end]
 
     # Reshape array to match image dimensions
     image_data = image_data.reshape((height, width))
@@ -33,11 +35,18 @@ def bin_to_png(bin_file, width, height, output_png):
     image.save(output_png)
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description='Convert 8-bit binary per pixel bin file to grayscale PNG')
-    parser.add_argument('bin_file', type=str, help='Input binary file')
-    parser.add_argument('width', type=int, help='Width of the image')
-    parser.add_argument('height', type=int, help='Height of the image')
-    parser.add_argument('output_png', type=str, help='Output PNG file')
-    args = parser.parse_args()
+    # parser = argparse.ArgumentParser(description='Convert 8-bit binary per pixel bin file to grayscale PNG')
+    # parser.add_argument('bin_file', type=str, help='Input binary file')
+    # parser.add_argument('width', type=int, help='Width of the image')
+    # parser.add_argument('height', type=int, help='Height of the image')
+    # parser.add_argument('output_png', type=str, help='Output PNG file')
+    # args = parser.parse_args()
 
-    bin_to_png(args.bin_file, args.width, args.height, args.output_png)
+    #bin_to_png(args.bin_file, args.width, args.height, args.output_png)
+
+    bin_file = "out.ppm"
+    width = 4096
+    height = 1540
+    output_png = "output_image_gray.png"
+
+    bin_to_png(bin_file, width, height, output_png)

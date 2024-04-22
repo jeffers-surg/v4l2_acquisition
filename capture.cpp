@@ -67,13 +67,14 @@ static io_method        io              = IO_METHOD_MMAP;
 static int              fd              = -1;
 struct buffer *         buffers         = NULL;
 static unsigned int     n_buffers       = 0;
+//static unsigned int     width           = 4096;
 static unsigned int     width           = 4096;
 static unsigned int     height          = 1540;
 static unsigned int     count           = 2;
 static unsigned char *  cuda_out_buffer = NULL;
 static bool             cuda_zero_copy = false;
 static const char *     file_name       = "out.ppm";
-static unsigned int     pixel_format    = V4L2_PIX_FMT_SGRBG10;
+static unsigned int     pixel_format    = V4L2_PIX_FMT_SBGGR10DPCM8; //V4L2_PIX_FMT_SGRBG10;
 //static unsigned int     pixel_format    = V4L2_PIX_FMT_SBGGR10;
 static unsigned int     field           = V4L2_FIELD_INTERLACED;
 
@@ -103,15 +104,16 @@ static void
 process_image                   (void *           p)
 {
     printf ("CUDA format conversion on frame %p\n", p);
-    gpuConvertYUYVtoRGB ((unsigned char *) p, cuda_out_buffer, width, height);
+    //gpuConvertYUYVtoRGB ((unsigned char *) p, cuda_out_buffer, width, height);
     //Bypass the YUV conversion
     //memcpy(cuda_out_buffer, p, width * height * 3);
 
     /* Save image. */
     if (count == 0) {
         FILE *fp = fopen (file_name, "wb");
-        fprintf (fp, "P6\n%u %u\n255\n", width, height);
-        fwrite (cuda_out_buffer, 1, width * height * 3, fp);
+        //fprintf (fp, "P6\n%u %u\n255\n", width, height);
+        //fwrite (cuda_out_buffer, 1, width * height * 3, fp);
+        fwrite (p, 1, width * height, fp);
         //fwrite (p, 1, width * height * 3, fp);
         fclose (fp);
     }

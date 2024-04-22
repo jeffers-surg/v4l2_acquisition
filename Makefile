@@ -26,7 +26,7 @@ SRCS := \
 	capture.cpp \
 	yuv2rgb.cu
 
-ALL_CPPFLAGS := $(addprefix -Xcompiler ,$(filter-out -std=c++11, $(CPPFLAGS)))
+ALL_CPPFLAGS := $(addprefix -Xcompiler -g3 ,$(filter-out -std=c++11, $(CPPFLAGS)))
 
 # CUDA code generation flags
 GENCODE_SM53 := -gencode arch=compute_53,code=sm_53
@@ -40,7 +40,7 @@ all: $(APP)
 
 capture.o: capture.cpp
 	@echo "Compiling: $<"
-	$(CPP) $(CPPFLAGS) -c $<
+	$(CPP) $(CPPFLAGS) -g3 -c $<
 
 yuv2rgb.o: yuv2rgb.cu
 	@echo "Compiling: $<"
