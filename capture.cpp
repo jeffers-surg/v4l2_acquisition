@@ -113,7 +113,7 @@ process_image                   (void *           p)
         FILE *fp = fopen (file_name, "wb");
         //fprintf (fp, "P6\n%u %u\n255\n", width, height);
         //fwrite (cuda_out_buffer, 1, width * height * 3, fp);
-        fwrite (p, 1, width * height, fp);
+        fwrite (p, 1, width * height * 3, fp);
         //fwrite (p, 1, width * height * 3, fp);
         fclose (fp);
     }
