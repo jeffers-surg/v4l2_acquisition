@@ -74,8 +74,8 @@ static unsigned int     count           = 2;
 static unsigned char *  cuda_out_buffer = NULL;
 static bool             cuda_zero_copy = false;
 static const char *     file_name       = "out.ppm";
-static unsigned int     pixel_format    = V4L2_PIX_FMT_SBGGR10DPCM8; //V4L2_PIX_FMT_SGRBG10;
-//static unsigned int     pixel_format    = V4L2_PIX_FMT_SBGGR10;
+//static unsigned int     pixel_format    = V4L2_PIX_FMT_SBGGR10DPCM8; //V4L2_PIX_FMT_SGRBG10;
+static unsigned int     pixel_format    = V4L2_PIX_FMT_SBGGR10;
 static unsigned int     field           = V4L2_FIELD_INTERLACED;
 
 static void
@@ -113,7 +113,7 @@ process_image                   (void *           p)
         FILE *fp = fopen (file_name, "wb");
         //fprintf (fp, "P6\n%u %u\n255\n", width, height);
         //fwrite (cuda_out_buffer, 1, width * height * 3, fp);
-        fwrite (p, 1, width * height * 3, fp);
+        fwrite (p, 1, width * height * 2, fp);
         //fwrite (p, 1, width * height * 3, fp);
         fclose (fp);
     }

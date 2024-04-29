@@ -20,10 +20,13 @@ def bin_to_png(bin_file, width, height, output_png):
     image_start = 0
     #image_end = width * height * 1
     #image_end = width * height * 2
-    image_end = width * height * 3 + image_start
-    image_step = 1
+    image_end = width * height * 2 + image_start
+    image_step = 2
     image_data = image_data[image_start:image_end:image_step]
     #image_data = image_data[image_start:image_end]
+
+    #Reshape again
+    image_data = image_data[image_start: width * height]
 
     # Reshape array to match image dimensions
     image_data = image_data.reshape((height, width))
