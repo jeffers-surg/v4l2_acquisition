@@ -58,7 +58,7 @@ def bin_to_png(bin_file, width, height, output_png):
         #print(f"image_data[{i - emb_metadata_offset}]: {bin(image_data[i + width])}")
 
     # Reduce the size of each pixel from 10 bits down to 8 bits (1 byte)
-    for y_index in range(0, 100):
+    for y_index in range(0, 400):
     #for y_index in range(0, 20):
         if (y_index % 20 == 0):
             print("On line: ", y_index, " of ", height, " lines.")
@@ -69,19 +69,19 @@ def bin_to_png(bin_file, width, height, output_png):
             #pixel_data = image_data[base_pixel_index] & 0xFF + ((image_data[base_pixel_index + 1] >> 6) & 0x03) << 8
             #pixel_data = (image_data[base_pixel_index] & 0x3) + ((image_data[base_pixel_index + 1]) & 0xFF) << 8
             #pixel_data = (image_data[base_pixel_index])
-            pixel_data = (image_data[base_pixel_index]) + ((image_data[base_pixel_index + 1]) << 8)
-            #pixel_data = (image_data[base_pixel_index + 1]) + ((image_data[base_pixel_index]) << 8)
+            #pixel_data = (image_data[base_pixel_index]) + ((image_data[base_pixel_index + 1]) << 8)
+            pixel_data = (image_data[base_pixel_index + 1]) + ((image_data[base_pixel_index]) << 8)
             #Shift the pixel data over by 2 bits
             #pixel_data = pixel_data << 2
             #pixel_data = image_data[base_pixel_index + 1] + 64
 
-            pixel_data = (pixel_data  / 65535) * 255
+            pixel_data = (pixel_data >> 3) & 0xFF
 
             #Save the pixel data back to a new image array
             reduced_image_data[y_index, x_index] = pixel_data
 
     # Apply debayering to convert the raw image to a color image
-    debayered_image = cv2.cvtColor(reduced_image_data,  cv2.COLOR_BayerRG2BGR)  # Adjust Bayer pattern based on your camera
+    debayered_image = cv2.cvtColor(reduced_image_data,  cv2.COLOR_BayerRG2RGB)  # Adjust Bayer pattern based on your camera
 
     # Convert to RGB
     #debayered_image = cv2.cvtColor(debayered_image,  cv2.COLOR_BGR2RGB)
@@ -95,7 +95,7 @@ def bin_to_png(bin_file, width, height, output_png):
     image.save(output_png)
 
 if __name__ == "__main__":
-    bin_file = "out.ppm"
+    bin_file = "out_0.ppm"
     width = 4096
     height = 1540
     output_png = "output_image_gray.png"

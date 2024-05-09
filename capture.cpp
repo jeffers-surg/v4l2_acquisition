@@ -70,7 +70,7 @@ static unsigned int     n_buffers       = 0;
 //static unsigned int     width           = 4096;
 static unsigned int     width           = 4096;
 static unsigned int     height          = 1540;
-static unsigned int     count           = 2;
+static unsigned int     count           = 40;
 static unsigned char *  cuda_out_buffer = NULL;
 static bool             cuda_zero_copy = false;
 static const char *     file_name       = "out.ppm";
@@ -103,20 +103,24 @@ xioctl                          (int                    fd,
 static void
 process_image                   (void *           p)
 {
-    printf ("CUDA format conversion on frame %p\n", p);
+    //printf ("CUDA format conversion on frame %p\n", p);
     //gpuConvertYUYVtoRGB ((unsigned char *) p, cuda_out_buffer, width, height);
     //Bypass the YUV conversion
     //memcpy(cuda_out_buffer, p, width * height * 3);
 
     /* Save image. */
-    if (count == 0) {
-        FILE *fp = fopen (file_name, "wb");
+    char output_file_name[64];
+    sprintf(output_file_name, "out_%d.ppm", count);
+
+    if (count % 20 == 0){
+        FILE *fp = fopen (output_file_name, "wb");
         //fprintf (fp, "P6\n%u %u\n255\n", width, height);
         //fwrite (cuda_out_buffer, 1, width * height * 3, fp);
-        fwrite (p, 1, width * height * 2, fp);
+        fwrite (p, 1, width * height *2, fp);
         //fwrite (p, 1, width * height * 3, fp);
         fclose (fp);
     }
+
 }
 
 static int
@@ -166,7 +170,8 @@ read_frame                      (void)
                         errno_exit ("VIDIOC_DQBUF");
                 }
             }
-
+            printf("buf.index: %d\n", buf.index);
+            printf("n_buffers: %d\n", n_buffers);
             assert (buf.index < n_buffers);
 
             process_image (buffers[buf.index].start);
@@ -454,7 +459,7 @@ init_userp                      (unsigned int           buffer_size)
 
     CLEAR (req);
 
-    req.count               = 4;
+    req.count               = 1;
     req.type                = V4L2_BUF_TYPE_VIDEO_CAPTURE;
     req.memory              = V4L2_MEMORY_USERPTR;
 
@@ -475,7 +480,7 @@ init_userp                      (unsigned int           buffer_size)
         exit (EXIT_FAILURE);
     }
 
-    for (n_buffers = 0; n_buffers < 4; ++n_buffers) {
+    for (n_buffers = 0; n_buffers < req.count; ++n_buffers) {
         buffers[n_buffers].length = buffer_size;
         if (cuda_zero_copy) {
             cudaMallocManaged (&buffers[n_buffers].start, buffer_size, cudaMemAttachGlobal);
@@ -819,7 +824,7 @@ main                            (int                    argc,
                 pixel_format = v4l2_format_code(optarg);
                 if (pixel_format == 0) {
                     printf("Unsupported video format '%s'\n", optarg);
-                    pixel_format = V4L2_PIX_FMT_UYVY;
+                    pixel_format = V4L2_PIX_FMT_SBGGR10;
                 }
                 break;
 
