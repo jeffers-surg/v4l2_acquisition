@@ -67,23 +67,11 @@ static unsigned int     count           = 40;
 static unsigned char *  cuda_out_buffer = NULL;
 static bool             cuda_zero_copy = false;
 static const char *     file_name       = "out.ppm";
-//static unsigned int     pixel_format    = V4L2_PIX_FMT_SBGGR10DPCM8; //V4L2_PIX_FMT_SGRBG10;
 static unsigned int     pixel_format    = V4L2_PIX_FMT_SBGGR10;
 static unsigned int     field           = V4L2_FIELD_INTERLACED;
 
-static void
-errno_exit                      (const char *           s)
-{
-    fprintf (stderr, "%s error %d, %s\n",
-            s, errno, strerror (errno));
-
-    exit (EXIT_FAILURE);
-}
-
-static int
-xioctl                          (int                    fd,
-                                 int                    request,
-                                 void *                 arg)
+//@brief 
+static int xioctl(int fd, int request, void * arg)
 {
     int r;
 
@@ -132,7 +120,6 @@ static int acquireFrame(void)
 
             default:
                 return false;
-                //errno_exit ("VIDIOC_DQBUF");
         }
     }
     assert (buf.index < n_buffers);
@@ -169,8 +156,7 @@ static bool captureLoop(void)
                 if (EINTR == errno){
                     continue;
                 }
-                
-                //errno_exit ("select");
+
                 return false;
             }
 
