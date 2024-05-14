@@ -103,21 +103,14 @@ xioctl                          (int                    fd,
 static void
 process_image                   (void *           p)
 {
-    //printf ("CUDA format conversion on frame %p\n", p);
-    //gpuConvertYUYVtoRGB ((unsigned char *) p, cuda_out_buffer, width, height);
-    //Bypass the YUV conversion
-    //memcpy(cuda_out_buffer, p, width * height * 3);
-
     /* Save image. */
     char output_file_name[64];
     sprintf(output_file_name, "out_%d.ppm", count);
 
-    if (count % 20 == 0){
+    if (count % 5 == 0){
+        printf("Writing out file %s\n", output_file_name);
         FILE *fp = fopen (output_file_name, "wb");
-        //fprintf (fp, "P6\n%u %u\n255\n", width, height);
-        //fwrite (cuda_out_buffer, 1, width * height * 3, fp);
         fwrite (p, 1, width * height *2, fp);
-        //fwrite (p, 1, width * height * 3, fp);
         fclose (fp);
     }
 
@@ -129,93 +122,33 @@ read_frame                      (void)
     struct v4l2_buffer buf;
     unsigned int i;
 
-    switch (io) {
-        case IO_METHOD_READ:
-            if (-1 == read (fd, buffers[0].start, buffers[0].length)) {
-                switch (errno) {
-                    case EAGAIN:
-                        return 0;
+    printf("read_frame: IO_METHOD_MMAP\n");
+    CLEAR (buf);
 
-                    case EIO:
-                        /* Could ignore EIO, see spec. */
+    buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+    buf.memory = V4L2_MEMORY_MMAP;
 
-                        /* fall through */
+    if (-1 == xioctl (fd, VIDIOC_DQBUF, &buf)) {
+        switch (errno) {
+            case EAGAIN:
+                return 0;
 
-                    default:
-                        errno_exit ("read");
-                }
-            }
+            case EIO:
+                /* Could ignore EIO, see spec. */
 
-            process_image (buffers[0].start);
+                /* fall through */
 
-            break;
-
-        case IO_METHOD_MMAP:
-            CLEAR (buf);
-
-            buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-            buf.memory = V4L2_MEMORY_MMAP;
-
-            if (-1 == xioctl (fd, VIDIOC_DQBUF, &buf)) {
-                switch (errno) {
-                    case EAGAIN:
-                        return 0;
-
-                    case EIO:
-                        /* Could ignore EIO, see spec. */
-
-                        /* fall through */
-
-                    default:
-                        errno_exit ("VIDIOC_DQBUF");
-                }
-            }
-            printf("buf.index: %d\n", buf.index);
-            printf("n_buffers: %d\n", n_buffers);
-            assert (buf.index < n_buffers);
-
-            process_image (buffers[buf.index].start);
-
-            if (-1 == xioctl (fd, VIDIOC_QBUF, &buf))
-                errno_exit ("VIDIOC_QBUF");
-
-            break;
-
-        case IO_METHOD_USERPTR:
-            CLEAR (buf);
-
-            buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-            buf.memory = V4L2_MEMORY_USERPTR;
-
-            if (-1 == xioctl (fd, VIDIOC_DQBUF, &buf)) {
-                switch (errno) {
-                    case EAGAIN:
-                        return 0;
-
-                    case EIO:
-                        /* Could ignore EIO, see spec. */
-
-                        /* fall through */
-
-                    default:
-                        errno_exit ("VIDIOC_DQBUF");
-                }
-            }
-
-            for (i = 0; i < n_buffers; ++i)
-                if (buf.m.userptr == (unsigned long) buffers[i].start
-                        && buf.length == buffers[i].length)
-                    break;
-
-            assert (i < n_buffers);
-
-            process_image ((void *) buf.m.userptr);
-
-            if (-1 == xioctl (fd, VIDIOC_QBUF, &buf))
-                errno_exit ("VIDIOC_QBUF");
-
-            break;
+            default:
+                errno_exit ("VIDIOC_DQBUF");
+        }
     }
+    assert (buf.index < n_buffers);
+
+    process_image (buffers[buf.index].start);
+
+    if (-1 == xioctl (fd, VIDIOC_QBUF, &buf))
+        errno_exit ("VIDIOC_QBUF");
+
 
     return 1;
 }
