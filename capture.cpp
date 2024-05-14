@@ -48,14 +48,10 @@
 #include <cuda_runtime.h>
 #include "yuv2rgb.cuh"
 
+#include <iostream>
+
 #define CLEAR(x) memset (&(x), 0, sizeof (x))
 #define ARRAY_SIZE(a)   (sizeof(a)/sizeof((a)[0]))
-
-typedef enum {
-    IO_METHOD_READ,
-    IO_METHOD_MMAP,
-    IO_METHOD_USERPTR,
-} io_method;
 
 struct buffer {
     void *                  start;
@@ -63,7 +59,6 @@ struct buffer {
 };
 
 static const char *     dev_name        = "/dev/video0";
-static io_method        io              = IO_METHOD_MMAP;
 static int              fd              = -1;
 struct buffer *         buffers         = NULL;
 static unsigned int     n_buffers       = 0;
@@ -236,10 +231,6 @@ uninit_device                   (void)
             errno_exit ("munmap");
 
     free (buffers);
-
-    if (cuda_zero_copy) {
-        cudaFree (cuda_out_buffer);
-    }
 }
 
 static void
@@ -368,8 +359,8 @@ init_userp                      (unsigned int           buffer_size)
     }
 }
 
-static void
-init_device                     (void)
+static bool
+initCamera                     (void)
 {
     struct v4l2_capability cap;
     struct v4l2_cropcap cropcap;
@@ -381,43 +372,25 @@ init_device                     (void)
         if (EINVAL == errno) {
             fprintf (stderr, "%s is no V4L2 device\n",
                     dev_name);
-            exit (EXIT_FAILURE);
+            return false;
         } else {
-            errno_exit ("VIDIOC_QUERYCAP");
+            return false;
         }
     }
 
     if (!(cap.capabilities & V4L2_CAP_VIDEO_CAPTURE)) {
         fprintf (stderr, "%s is no video capture device\n",
                 dev_name);
-        exit (EXIT_FAILURE);
+        return false;
     }
 
-    switch (io) {
-        case IO_METHOD_READ:
-            if (!(cap.capabilities & V4L2_CAP_READWRITE)) {
-                fprintf (stderr, "%s does not support read i/o\n",
-                        dev_name);
-                exit (EXIT_FAILURE);
-            }
-
-            break;
-
-        case IO_METHOD_MMAP:
-        case IO_METHOD_USERPTR:
-            if (!(cap.capabilities & V4L2_CAP_STREAMING)) {
-                fprintf (stderr, "%s does not support streaming i/o\n",
-                        dev_name);
-                exit (EXIT_FAILURE);
-            }
-
-            break;
+    if (!(cap.capabilities & V4L2_CAP_STREAMING)) {
+        fprintf (stderr, "%s does not support streaming i/o\n",
+                dev_name);
+        return false;
     }
-
 
     /* Select video input, video standard and tune here. */
-
-
     CLEAR (cropcap);
 
     cropcap.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
@@ -450,7 +423,7 @@ init_device                     (void)
     fmt.fmt.pix.field       = field;
 
     if (-1 == xioctl (fd, VIDIOC_S_FMT, &fmt))
-        errno_exit ("VIDIOC_S_FMT");
+        return false;
 
     /* Note VIDIOC_S_FMT may change width and height. */
 
@@ -462,19 +435,9 @@ init_device                     (void)
     if (fmt.fmt.pix.sizeimage < min)
         fmt.fmt.pix.sizeimage = min;
 
-    switch (io) {
-        case IO_METHOD_READ:
-            init_read (fmt.fmt.pix.sizeimage);
-            break;
+    init_mmap ();
 
-        case IO_METHOD_MMAP:
-            init_mmap ();
-            break;
-
-        case IO_METHOD_USERPTR:
-            init_userp (fmt.fmt.pix.sizeimage);
-            break;
-    }
+    return true;
 }
 
 static void
@@ -486,20 +449,20 @@ close_device                    (void)
     fd = -1;
 }
 
-static void
-open_device                     (void)
+static bool
+openCamera                     (void)
 {
     struct stat st;
 
     if (-1 == stat (dev_name, &st)) {
         fprintf (stderr, "Cannot identify '%s': %d, %s\n",
                 dev_name, errno, strerror (errno));
-        exit (EXIT_FAILURE);
+        return false;
     }
 
     if (!S_ISCHR (st.st_mode)) {
         fprintf (stderr, "%s is no device\n", dev_name);
-        exit (EXIT_FAILURE);
+        return false;
     }
 
     fd = open (dev_name, O_RDWR /* required */ | O_NONBLOCK, 0);
@@ -507,8 +470,10 @@ open_device                     (void)
     if (-1 == fd) {
         fprintf (stderr, "Cannot open '%s': %d, %s\n",
                 dev_name, errno, strerror (errno));
-        exit (EXIT_FAILURE);
+        return false;
     }
+
+    return true;
 }
 
 static void
@@ -665,89 +630,24 @@ static unsigned int v4l2_field_code(const char *name)
     return -1;
 }
 
-int
-main                            (int                    argc,
-                                 char **                argv)
+int main()
 {
-    for (;;) {
-        int index;
-        int c;
+    bool status;
 
-        c = getopt_long (argc, argv,
-                short_options, long_options,
-                &index);
-
-        if (-1 == c)
-            break;
-
-        switch (c) {
-            case 0: /* getopt_long() flag */
-                break;
-
-            case 'c':
-                count = atoi (optarg);
-                break;
-
-            case 'd':
-                dev_name = optarg;
-                break;
-
-            case 'f':
-                pixel_format = v4l2_format_code(optarg);
-                if (pixel_format == 0) {
-                    printf("Unsupported video format '%s'\n", optarg);
-                    pixel_format = V4L2_PIX_FMT_SBGGR10;
-                }
-                break;
-
-            case 'F':
-                field = v4l2_field_code(optarg);
-                if ((int)field < 0) {
-                    printf("Unsupported field '%s'\n", optarg);
-                    field = V4L2_FIELD_INTERLACED;
-                }
-                break;
-
-            case 'h':
-                usage (stdout, argc, argv);
-                exit (EXIT_SUCCESS);
-
-            case 'm':
-                io = IO_METHOD_MMAP;
-                break;
-
-            case 'o':
-                file_name = optarg;
-                break;
-
-            case 'r':
-                io = IO_METHOD_READ;
-                break;
-
-            case 's':
-                width = atoi (strtok (optarg, "x"));
-                height = atoi (strtok (NULL, "x"));
-                break;
-
-            case 'u':
-                io = IO_METHOD_USERPTR;
-                break;
-
-            case 'z':
-                cuda_zero_copy = true;
-                break;
-
-            default:
-                usage (stderr, argc, argv);
-                exit (EXIT_FAILURE);
-        }
+    //open_device ();
+    status = openCamera();
+    if (!status){
+        std::cout << "Failed to open camera!" << std::endl;
     }
 
-    open_device ();
+    //init_device();
+    status = initCamera();
+    if (!status){
+        std::cout << "Failed to initialize camera!" << std::endl;
+    }
 
-    init_device ();
-
-    init_cuda ();
+    //Disable this altogether.  We should not need to allocate CUDA memory here
+    //init_cuda ();
 
     start_capturing ();
 
