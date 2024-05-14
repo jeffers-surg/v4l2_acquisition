@@ -50,7 +50,6 @@
 #include <iostream>
 
 #define CLEAR(x) memset (&(x), 0, sizeof (x))
-#define ARRAY_SIZE(a)   (sizeof(a)/sizeof((a)[0]))
 
 struct buffer {
     void *                  start;
@@ -94,8 +93,8 @@ xioctl                          (int                    fd,
     return r;
 }
 
-static void
-process_image                   (void *           p)
+//! @brief Output image to a file
+static void outputImage(void *           p)
 {
     /* Save image. */
     char output_file_name[64];
@@ -107,16 +106,15 @@ process_image                   (void *           p)
         fwrite (p, 1, width * height *2, fp);
         fclose (fp);
     }
-
 }
 
-static int
-read_frame                      (void)
+//! @brief Acquire a frame from v4l2
+//! @return true if frame is successfully acquired, false otherwise
+static int acquireFrame(void)
 {
     struct v4l2_buffer buf;
     unsigned int i;
 
-    printf("read_frame: IO_METHOD_MMAP\n");
     CLEAR (buf);
 
     buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
@@ -133,22 +131,24 @@ read_frame                      (void)
                 /* fall through */
 
             default:
-                errno_exit ("VIDIOC_DQBUF");
+                return false;
+                //errno_exit ("VIDIOC_DQBUF");
         }
     }
     assert (buf.index < n_buffers);
 
-    process_image (buffers[buf.index].start);
+    outputImage(buffers[buf.index].start);
 
-    if (-1 == xioctl (fd, VIDIOC_QBUF, &buf))
-        errno_exit ("VIDIOC_QBUF");
-
+    if (-1 == xioctl (fd, VIDIOC_QBUF, &buf)){
+        return false;
+    }
 
     return 1;
 }
 
-static void
-mainloop                        (void)
+//! @brief Main capture loop for capturing images from camera
+//! @return true if image is successfully captured from camera, false otherwise
+static bool captureLoop(void)
 {
     while (count-- > 0) {
         for (;;) {
@@ -166,18 +166,20 @@ mainloop                        (void)
             r = select (fd + 1, &fds, NULL, NULL, &tv);
 
             if (-1 == r) {
-                if (EINTR == errno)
+                if (EINTR == errno){
                     continue;
-
-                errno_exit ("select");
+                }
+                
+                //errno_exit ("select");
+                return false;
             }
 
             if (0 == r) {
-                fprintf (stderr, "select timeout\n");
-                exit (EXIT_FAILURE);
+                std::cout << "select timeout" << std::endl;
+                return false;
             }
 
-            if (read_frame ())
+            if (acquireFrame())
                 break;
 
             /* EAGAIN - continue select loop. */
@@ -185,17 +187,8 @@ mainloop                        (void)
     }
 }
 
-static bool stopCameraCapture(void)
-{
-    enum v4l2_buf_type type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-
-    if (-1 == xioctl (fd, VIDIOC_STREAMOFF, &type)) {
-        return false;
-    }
-
-    return true;
-}
-
+//! @brief Command the camera to start capturing
+//! @return true if camera capture is successfully started, false otherwise
 static bool startCameraCapture(void)
 {
     unsigned int i;
@@ -225,94 +218,48 @@ static bool startCameraCapture(void)
     return true;
 }
 
-static bool
-uninit_device                   (void)
+//! @brief Open the camera device
+//! @return true if camera device is successfully opened, false otherwise
+static bool openCamera(void)
 {
-    unsigned int i;
+    struct stat st;
 
-    for (i = 0; i < n_buffers; ++i){
-        if (-1 == munmap (buffers[i].start, buffers[i].length)){
-            return false;
-        }
+    if (-1 == stat (dev_name, &st)) {
+        std::cout << "Cannot identify " << dev_name << ":" << errno << "," << strerror(errno) << std::endl;
+
+        return false;
     }
 
-    free (buffers);
+    if (!S_ISCHR (st.st_mode)) {
+        std::cout << dev_name << " is no device" << std::endl;
+        return false;
+    }
+
+    fd = open (dev_name, O_RDWR /* required */ | O_NONBLOCK, 0);
+
+    if (-1 == fd) {
+        std::cout << "Cannot open " << dev_name << ":" << errno << "," << strerror(errno) << std::endl;
+        return false;
+    }
 
     return true;
 }
 
-static void
-init_mmap                       (void)
-{
-    struct v4l2_requestbuffers req;
-
-    CLEAR (req);
-
-    req.count               = 4;
-    req.type                = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-    req.memory              = V4L2_MEMORY_MMAP;
-
-    if (-1 == xioctl (fd, VIDIOC_REQBUFS, &req)) {
-        if (EINVAL == errno) {
-            fprintf (stderr, "%s does not support "
-                    "memory mapping\n", dev_name);
-            exit (EXIT_FAILURE);
-        } else {
-            errno_exit ("VIDIOC_REQBUFS");
-        }
-    }
-
-    if (req.count < 2) {
-        fprintf (stderr, "Insufficient buffer memory on %s\n",
-                dev_name);
-        exit (EXIT_FAILURE);
-    }
-
-    buffers = (struct buffer *) calloc (req.count, sizeof (*buffers));
-
-    if (!buffers) {
-        fprintf (stderr, "Out of memory\n");
-        exit (EXIT_FAILURE);
-    }
-
-    for (n_buffers = 0; n_buffers < req.count; ++n_buffers) {
-        struct v4l2_buffer buf;
-
-        CLEAR (buf);
-
-        buf.type        = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-        buf.memory      = V4L2_MEMORY_MMAP;
-        buf.index       = n_buffers;
-
-        if (-1 == xioctl (fd, VIDIOC_QUERYBUF, &buf))
-            errno_exit ("VIDIOC_QUERYBUF");
-
-        buffers[n_buffers].length = buf.length;
-        buffers[n_buffers].start =
-            mmap (NULL /* start anywhere */,
-                    buf.length,
-                    PROT_READ | PROT_WRITE /* required */,
-                    MAP_SHARED /* recommended */,
-                    fd, buf.m.offset);
-
-        if (MAP_FAILED == buffers[n_buffers].start)
-            errno_exit ("mmap");
-    }
-}
-
-static bool
-initCamera                     (void)
+//! @brief Initialize camera for image capture
+//! @return true if camera is successfully initialized for streaming, false otherwise
+static bool initCamera(void)
 {
     struct v4l2_capability cap;
     struct v4l2_cropcap cropcap;
     struct v4l2_crop crop;
     struct v4l2_format fmt;
     unsigned int min;
+    bool status;
 
     if (-1 == xioctl (fd, VIDIOC_QUERYCAP, &cap)) {
         if (EINVAL == errno) {
-            fprintf (stderr, "%s is no V4L2 device\n",
-                    dev_name);
+            std::cout << dev_name << " is no V4L2 device" << std::endl;
+
             return false;
         } else {
             return false;
@@ -320,14 +267,12 @@ initCamera                     (void)
     }
 
     if (!(cap.capabilities & V4L2_CAP_VIDEO_CAPTURE)) {
-        fprintf (stderr, "%s is no video capture device\n",
-                dev_name);
+        std::cout << dev_name << " is no video capture device" << std::endl;
         return false;
     }
 
     if (!(cap.capabilities & V4L2_CAP_STREAMING)) {
-        fprintf (stderr, "%s does not support streaming i/o\n",
-                dev_name);
+        std::cout << dev_name << " does not support streaming i/o" << std::endl;
         return false;
     }
 
@@ -376,43 +321,140 @@ initCamera                     (void)
     if (fmt.fmt.pix.sizeimage < min)
         fmt.fmt.pix.sizeimage = min;
 
-    init_mmap ();
+    status = initMemoryMap ();
+    if (!status){
+        std::cout << "Failed to initialize mapped memory!" << std::endl;
+        return false;
+    }
 
     return true;
 }
 
-static void
-close_device                    (void)
+//! @brief Initialize memory map used for acquiring images
+//! @return true if memory map is successfully allocated, false otherwise
+static bool initMemoryMap(void)
 {
-    if (-1 == close (fd))
-        errno_exit ("close");
+    struct v4l2_requestbuffers req;
 
-    fd = -1;
+    CLEAR (req);
+
+    req.count               = 4;
+    req.type                = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+    req.memory              = V4L2_MEMORY_MMAP;
+
+    if (-1 == xioctl (fd, VIDIOC_REQBUFS, &req)) {
+        if (EINVAL == errno) {
+            std::cout << dev_name << " does not support memory mapping!" << std::endl;
+            return false;
+        } else {
+            std::cout << "VIDIOC_REQBUFS failed!" << std::endl;
+            return false;
+        }
+    }
+
+    if (req.count < 2) {
+        std::cout << "Insufficient buffer memory on " << dev_name << std::endl;
+        return false;
+    }
+
+    buffers = (struct buffer *) calloc (req.count, sizeof (*buffers));
+
+    if (!buffers) {
+        std::cout << "Out of memory" << std::endl;
+        return false;
+    }
+
+    for (n_buffers = 0; n_buffers < req.count; ++n_buffers) {
+        struct v4l2_buffer buf;
+
+        CLEAR (buf);
+
+        buf.type        = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+        buf.memory      = V4L2_MEMORY_MMAP;
+        buf.index       = n_buffers;
+
+        if (-1 == xioctl (fd, VIDIOC_QUERYBUF, &buf)){
+            std::cout << "VIDEOC_QUERYBUF" << std::endl;
+            return false;
+        }
+
+        buffers[n_buffers].length = buf.length;
+        buffers[n_buffers].start =
+            mmap (NULL /* start anywhere */,
+                    buf.length,
+                    PROT_READ | PROT_WRITE /* required */,
+                    MAP_SHARED /* recommended */,
+                    fd, buf.m.offset);
+
+        if (MAP_FAILED == buffers[n_buffers].start) {
+            std::cout << "mmap" << std::endl;
+            return false;
+        }
+    }
+    return true;
 }
 
-static bool
-openCamera                     (void)
+//! @brief Start camera capture
+//! @return true if camera capture is successfully started, false otherwise
+static bool startCameraCapture(void)
 {
-    struct stat st;
+    unsigned int i;
+    enum v4l2_buf_type type;
 
-    if (-1 == stat (dev_name, &st)) {
-        fprintf (stderr, "Cannot identify '%s': %d, %s\n",
-                dev_name, errno, strerror (errno));
+    for (i = 0; i < n_buffers; ++i) {
+        struct v4l2_buffer buf;
+
+        CLEAR (buf);
+
+        buf.type        = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+        buf.memory      = V4L2_MEMORY_MMAP;
+        buf.index       = i;
+
+        if (-1 == xioctl (fd, VIDIOC_QBUF, &buf)){
+            return false;
+        }
+            
+    }
+
+    type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+
+    if (-1 == xioctl (fd, VIDIOC_STREAMON, &type)){
         return false;
     }
 
-    if (!S_ISCHR (st.st_mode)) {
-        fprintf (stderr, "%s is no device\n", dev_name);
+    return true;
+}
+
+//! @brief Stop camera capture
+//! @return true if camera capture is successfully stopped, false otherwise
+static bool stopCameraCapture(void)
+{
+    enum v4l2_buf_type type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+
+    if (-1 == xioctl (fd, VIDIOC_STREAMOFF, &type)) {
         return false;
     }
 
-    fd = open (dev_name, O_RDWR /* required */ | O_NONBLOCK, 0);
+    return true;
+}
+//! @brief Close the camera
+//! @return true if camera is successfully closed, false otherwise
+static bool closeCamera(void){
+    unsigned int i;
 
-    if (-1 == fd) {
-        fprintf (stderr, "Cannot open '%s': %d, %s\n",
-                dev_name, errno, strerror (errno));
+    for (i = 0; i < n_buffers; ++i){
+        if (-1 == munmap (buffers[i].start, buffers[i].length)){
+            return false;
+        }
+    }
+
+    free (buffers);
+
+    if (-1 == close (fd)){
         return false;
     }
+        
+    fd = -1;
 
     return true;
 }
@@ -442,7 +484,7 @@ int main()
         std::cout << "Failed to start camera capture!" << std::endl;
     }
 
-    mainloop ();
+    captureLoop();
 
     //stop_capturing ();
     status = stopCameraCapture();
@@ -450,9 +492,14 @@ int main()
         std::cout << "Failed to stop camera capture!" << std::endl;
     }
 
-    uninit_device ();
+    //uninit_device ();
 
-    close_device ();
+    //close_device ();
+
+    status = closeCamera();
+    if (!status){
+        std::cout << "Failed to close camera!" << std::endl;
+    }
 
     //exit (EXIT_SUCCESS);
 
