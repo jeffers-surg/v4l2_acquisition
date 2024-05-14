@@ -186,17 +186,18 @@ mainloop                        (void)
     }
 }
 
-static void
-stop_capturing                  (void)
+static bool stopCameraCapture(void)
 {
     enum v4l2_buf_type type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 
-    if (-1 == xioctl (fd, VIDIOC_STREAMOFF, &type))
-        errno_exit ("VIDIOC_STREAMOFF");
+    if (-1 == xioctl (fd, VIDIOC_STREAMOFF, &type)) {
+        return false;
+    }
+
+    return true;
 }
 
-static void
-start_capturing                 (void)
+static bool startCameraCapture(void)
 {
     unsigned int i;
     enum v4l2_buf_type type;
@@ -210,27 +211,35 @@ start_capturing                 (void)
         buf.memory      = V4L2_MEMORY_MMAP;
         buf.index       = i;
 
-        if (-1 == xioctl (fd, VIDIOC_QBUF, &buf))
-            errno_exit ("VIDIOC_QBUF");
+        if (-1 == xioctl (fd, VIDIOC_QBUF, &buf)){
+            return false;
+        }
+            
     }
 
     type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 
-    if (-1 == xioctl (fd, VIDIOC_STREAMON, &type))
-        errno_exit ("VIDIOC_STREAMON");
+    if (-1 == xioctl (fd, VIDIOC_STREAMON, &type)){
+        return false;
+    }
 
+    return true;
 }
 
-static void
+static bool
 uninit_device                   (void)
 {
     unsigned int i;
 
-    for (i = 0; i < n_buffers; ++i)
-        if (-1 == munmap (buffers[i].start, buffers[i].length))
-            errno_exit ("munmap");
+    for (i = 0; i < n_buffers; ++i){
+        if (-1 == munmap (buffers[i].start, buffers[i].length)){
+            return false;
+        }
+    }
 
     free (buffers);
+
+    return true;
 }
 
 static void
@@ -649,17 +658,25 @@ int main()
     //Disable this altogether.  We should not need to allocate CUDA memory here
     //init_cuda ();
 
-    start_capturing ();
+    //start_capturing ();
+    status = startCameraCapture();
+    if (!status){
+        std::cout << "Failed to start camera capture!" << std::endl;
+    }
 
     mainloop ();
 
-    stop_capturing ();
+    //stop_capturing ();
+    status = stopCameraCapture();
+    if (!status){
+        std::cout << "Failed to stop camera capture!" << std::endl;
+    }
 
     uninit_device ();
 
     close_device ();
 
-    exit (EXIT_SUCCESS);
+    //exit (EXIT_SUCCESS);
 
     return 0;
 }
