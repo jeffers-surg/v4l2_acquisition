@@ -60,7 +60,6 @@ static const char *     dev_name        = "/dev/video0";
 static int              fd              = -1;
 struct buffer *         buffers         = NULL;
 static unsigned int     n_buffers       = 0;
-//static unsigned int     width           = 4096;
 static unsigned int     width           = 4096;
 static unsigned int     height          = 1540;
 static unsigned int     count           = 40;
@@ -79,98 +78,6 @@ static int xioctl(int fd, int request, void * arg)
     while (-1 == r && EINTR == errno);
 
     return r;
-}
-
-//! @brief Output image to a file
-static void outputImage(void *           p)
-{
-    /* Save image. */
-    char output_file_name[64];
-    sprintf(output_file_name, "out_%d.ppm", count);
-
-    if (count % 5 == 0){
-        printf("Writing out file %s\n", output_file_name);
-        FILE *fp = fopen (output_file_name, "wb");
-        fwrite (p, 1, width * height *2, fp);
-        fclose (fp);
-    }
-}
-
-//! @brief Acquire a frame from v4l2
-//! @return true if frame is successfully acquired, false otherwise
-static int acquireFrame(void)
-{
-    struct v4l2_buffer buf;
-    unsigned int i;
-
-    CLEAR (buf);
-
-    buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-    buf.memory = V4L2_MEMORY_MMAP;
-
-    if (-1 == xioctl (fd, VIDIOC_DQBUF, &buf)) {
-        switch (errno) {
-            case EAGAIN:
-                return 0;
-
-            case EIO:
-                /* Could ignore EIO, see spec. */
-
-                /* fall through */
-
-            default:
-                return false;
-        }
-    }
-    assert (buf.index < n_buffers);
-
-    outputImage(buffers[buf.index].start);
-
-    if (-1 == xioctl (fd, VIDIOC_QBUF, &buf)){
-        return false;
-    }
-
-    return 1;
-}
-
-//! @brief Main capture loop for capturing images from camera
-//! @return true if image is successfully captured from camera, false otherwise
-static bool captureLoop(void)
-{
-    while (count-- > 0) {
-        for (;;) {
-            fd_set fds;
-            struct timeval tv;
-            int r;
-
-            FD_ZERO (&fds);
-            FD_SET (fd, &fds);
-
-            /* Timeout. */
-            tv.tv_sec = 2;
-            tv.tv_usec = 0;
-
-            r = select (fd + 1, &fds, NULL, NULL, &tv);
-
-            if (-1 == r) {
-                if (EINTR == errno){
-                    continue;
-                }
-
-                return false;
-            }
-
-            if (0 == r) {
-                std::cout << "select timeout" << std::endl;
-                return false;
-            }
-
-            if (acquireFrame())
-                break;
-
-            /* EAGAIN - continue select loop. */
-        }
-    }
 }
 
 //! @brief Command the camera to start capturing
@@ -411,6 +318,98 @@ static bool startCameraCapture(void)
     return true;
 }
 
+//! @brief Main capture loop for capturing images from camera
+//! @return true if image is successfully captured from camera, false otherwise
+static bool captureLoop(void)
+{
+    while (count-- > 0) {
+        for (;;) {
+            fd_set fds;
+            struct timeval tv;
+            int r;
+
+            FD_ZERO (&fds);
+            FD_SET (fd, &fds);
+
+            /* Timeout. */
+            tv.tv_sec = 2;
+            tv.tv_usec = 0;
+
+            r = select (fd + 1, &fds, NULL, NULL, &tv);
+
+            if (-1 == r) {
+                if (EINTR == errno){
+                    continue;
+                }
+
+                return false;
+            }
+
+            if (0 == r) {
+                std::cout << "select timeout" << std::endl;
+                return false;
+            }
+
+            if (acquireFrame())
+                break;
+
+            /* EAGAIN - continue select loop. */
+        }
+    }
+}
+
+//! @brief Acquire a frame from v4l2
+//! @return true if frame is successfully acquired, false otherwise
+static int acquireFrame(void)
+{
+    struct v4l2_buffer buf;
+    unsigned int i;
+
+    CLEAR (buf);
+
+    buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+    buf.memory = V4L2_MEMORY_MMAP;
+
+    if (-1 == xioctl (fd, VIDIOC_DQBUF, &buf)) {
+        switch (errno) {
+            case EAGAIN:
+                return 0;
+
+            case EIO:
+                /* Could ignore EIO, see spec. */
+
+                /* fall through */
+
+            default:
+                return false;
+        }
+    }
+    assert (buf.index < n_buffers);
+
+    outputImage(buffers[buf.index].start);
+
+    if (-1 == xioctl (fd, VIDIOC_QBUF, &buf)){
+        return false;
+    }
+
+    return 1;
+}
+
+//! @brief Output image to a file
+static void outputImage(void * p)
+{
+    /* Save image. */
+    char output_file_name[64];
+    sprintf(output_file_name, "out_%d.ppm", count);
+
+    if (count % 5 == 0){
+        printf("Writing out file %s\n", output_file_name);
+        FILE *fp = fopen (output_file_name, "wb");
+        fwrite (p, 1, width * height *2, fp);
+        fclose (fp);
+    }
+}
+
 //! @brief Stop camera capture
 //! @return true if camera capture is successfully stopped, false otherwise
 static bool stopCameraCapture(void)
@@ -423,6 +422,7 @@ static bool stopCameraCapture(void)
 
     return true;
 }
+
 //! @brief Close the camera
 //! @return true if camera is successfully closed, false otherwise
 static bool closeCamera(void){
@@ -449,45 +449,33 @@ int main()
 {
     bool status;
 
-    //open_device ();
     status = openCamera();
     if (!status){
         std::cout << "Failed to open camera!" << std::endl;
     }
 
-    //init_device();
     status = initCamera();
     if (!status){
         std::cout << "Failed to initialize camera!" << std::endl;
     }
 
-    //Disable this altogether.  We should not need to allocate CUDA memory here
-    //init_cuda ();
-
-    //start_capturing ();
     status = startCameraCapture();
     if (!status){
         std::cout << "Failed to start camera capture!" << std::endl;
     }
 
+    //Main loop for capturing images
     captureLoop();
 
-    //stop_capturing ();
     status = stopCameraCapture();
     if (!status){
         std::cout << "Failed to stop camera capture!" << std::endl;
     }
 
-    //uninit_device ();
-
-    //close_device ();
-
     status = closeCamera();
     if (!status){
         std::cout << "Failed to close camera!" << std::endl;
     }
-
-    //exit (EXIT_SUCCESS);
 
     return 0;
 }
