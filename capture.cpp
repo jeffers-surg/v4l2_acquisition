@@ -69,6 +69,18 @@ static const char *     file_name       = "out.ppm";
 static unsigned int     pixel_format    = V4L2_PIX_FMT_SBGGR10;
 static unsigned int     field           = V4L2_FIELD_INTERLACED;
 
+//Function declarations
+static int xioctl(int fd, int request, void * arg);
+static bool openCamera(void);
+static bool initCamera(void);
+static bool initMemoryMap(void);
+static bool startCameraCapture(void);
+static bool captureLoop(void);
+static int acquireFrame(void);
+static void outputImage(void * p);
+static bool stopCameraCapture(void);
+static bool closeCamera(void);
+
 //@brief 
 static int xioctl(int fd, int request, void * arg)
 {
@@ -78,37 +90,6 @@ static int xioctl(int fd, int request, void * arg)
     while (-1 == r && EINTR == errno);
 
     return r;
-}
-
-//! @brief Command the camera to start capturing
-//! @return true if camera capture is successfully started, false otherwise
-static bool startCameraCapture(void)
-{
-    unsigned int i;
-    enum v4l2_buf_type type;
-
-    for (i = 0; i < n_buffers; ++i) {
-        struct v4l2_buffer buf;
-
-        CLEAR (buf);
-
-        buf.type        = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-        buf.memory      = V4L2_MEMORY_MMAP;
-        buf.index       = i;
-
-        if (-1 == xioctl (fd, VIDIOC_QBUF, &buf)){
-            return false;
-        }
-            
-    }
-
-    type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-
-    if (-1 == xioctl (fd, VIDIOC_STREAMON, &type)){
-        return false;
-    }
-
-    return true;
 }
 
 //! @brief Open the camera device

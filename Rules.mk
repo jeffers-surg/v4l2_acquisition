@@ -103,7 +103,7 @@ CPPFLAGS += -std=c++11 \
 # All common dependent libraries
 LDFLAGS += \
 	-lpthread -lnvv4l2 -lEGL -lGLESv2 -lX11 \
-	-lnvbufsurface -lnvbufsurftransform -lnvjpeg -lnvosd -ldrm \
+	-lnvjpeg -lnvosd -ldrm \
 	-lcuda -lcudart \
 	-L"$(TARGET_ROOTFS)/$(CUDA_PATH)/lib64" \
 	-L"$(TARGET_ROOTFS)/usr/lib/$(TEGRA_ARMABI)" \
