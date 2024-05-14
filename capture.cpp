@@ -206,55 +206,24 @@ start_capturing                 (void)
     unsigned int i;
     enum v4l2_buf_type type;
 
-    switch (io) {
-        case IO_METHOD_READ:
-            /* Nothing to do. */
-            break;
+    for (i = 0; i < n_buffers; ++i) {
+        struct v4l2_buffer buf;
 
-        case IO_METHOD_MMAP:
-            for (i = 0; i < n_buffers; ++i) {
-                struct v4l2_buffer buf;
+        CLEAR (buf);
 
-                CLEAR (buf);
+        buf.type        = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+        buf.memory      = V4L2_MEMORY_MMAP;
+        buf.index       = i;
 
-                buf.type        = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-                buf.memory      = V4L2_MEMORY_MMAP;
-                buf.index       = i;
-
-                if (-1 == xioctl (fd, VIDIOC_QBUF, &buf))
-                    errno_exit ("VIDIOC_QBUF");
-            }
-
-            type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-
-            if (-1 == xioctl (fd, VIDIOC_STREAMON, &type))
-                errno_exit ("VIDIOC_STREAMON");
-
-            break;
-
-        case IO_METHOD_USERPTR:
-            for (i = 0; i < n_buffers; ++i) {
-                struct v4l2_buffer buf;
-
-                CLEAR (buf);
-
-                buf.type        = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-                buf.memory      = V4L2_MEMORY_USERPTR;
-                buf.index       = i;
-                buf.m.userptr   = (unsigned long) buffers[i].start;
-                buf.length      = buffers[i].length;
-
-                if (-1 == xioctl (fd, VIDIOC_QBUF, &buf))
-                    errno_exit ("VIDIOC_QBUF");
-            }
-
-            type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-
-            if (-1 == xioctl (fd, VIDIOC_STREAMON, &type))
-                errno_exit ("VIDIOC_STREAMON");
-
-            break;
+        if (-1 == xioctl (fd, VIDIOC_QBUF, &buf))
+            errno_exit ("VIDIOC_QBUF");
     }
+
+    type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+
+    if (-1 == xioctl (fd, VIDIOC_STREAMON, &type))
+        errno_exit ("VIDIOC_STREAMON");
+
 }
 
 static void
@@ -262,27 +231,9 @@ uninit_device                   (void)
 {
     unsigned int i;
 
-    switch (io) {
-        case IO_METHOD_READ:
-            free (buffers[0].start);
-            break;
-
-        case IO_METHOD_MMAP:
-            for (i = 0; i < n_buffers; ++i)
-                if (-1 == munmap (buffers[i].start, buffers[i].length))
-                    errno_exit ("munmap");
-            break;
-
-        case IO_METHOD_USERPTR:
-            for (i = 0; i < n_buffers; ++i) {
-                if (cuda_zero_copy) {
-                    cudaFree (buffers[i].start);
-                } else {
-                    free (buffers[i].start);
-                }
-            }
-            break;
-    }
+    for (i = 0; i < n_buffers; ++i)
+        if (-1 == munmap (buffers[i].start, buffers[i].length))
+            errno_exit ("munmap");
 
     free (buffers);
 
