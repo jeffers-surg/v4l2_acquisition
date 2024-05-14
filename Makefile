@@ -23,8 +23,7 @@ include ./Rules.mk
 APP := v4l2_camera_cuda_rgb
 
 SRCS := \
-	capture.cpp \
-	yuv2rgb.cu
+	capture.cpp
 
 ALL_CPPFLAGS := $(addprefix -Xcompiler -g3 ,$(filter-out -std=c++11, $(CPPFLAGS)))
 
@@ -42,11 +41,7 @@ capture.o: capture.cpp
 	@echo "Compiling: $<"
 	$(CPP) $(CPPFLAGS) -g3 -c $<
 
-yuv2rgb.o: yuv2rgb.cu
-	@echo "Compiling: $<"
-	$(NVCC) $(ALL_CPPFLAGS) $(GENCODE_FLAGS) -c $<
-
-$(APP): capture.o yuv2rgb.o
+$(APP): capture.o
 	@echo "Linking: $@"
 	$(CPP) -o $@ $^ $(CPPFLAGS) $(LDFLAGS)
 

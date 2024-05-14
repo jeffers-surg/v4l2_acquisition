@@ -45,8 +45,6 @@
 
 #include <linux/videodev2.h>
 
-#include <cuda_runtime.h>
-
 #include <iostream>
 
 #define CLEAR(x) memset (&(x), 0, sizeof (x))
